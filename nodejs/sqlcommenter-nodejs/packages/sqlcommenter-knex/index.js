@@ -31,9 +31,10 @@ const defaultFields = {
  * @param {Object} include - A map of values to be optionally included.
  * @param {Object} options - A configuration object specifying where to collect trace data from. Accepted fields are:
  *  TraceProvider: Should be either 'OpenCensus' or 'OpenTelemetry', indicating which library to collect trace data from.
+ * @param {Object} additionalComments - A map of strings or functions returning strings that should be included in all comments.
  * @return {void}
  */
-exports.wrapMainKnex = (Knex, include={}, options={}) => {
+exports.wrapMainKnex = (Knex, include={}, options={}, additionalComments = {}) => {
 
     /* c8 ignore next 2 */
     if (Knex.___alreadySQLCommenterWrapped___)
@@ -60,9 +61,11 @@ exports.wrapMainKnex = (Knex, include={}, options={}) => {
             return query.apply(this, [conn, obj]);
 
         const knexVersion = getKnexVersion(Knex);
-        const comments = {
-            db_driver: `knex:${knexVersion}`
-        };
+        const comments = {};
+        for (const [key, comment] of Object.entries(additionalComments)) {
+            comments[key] = typeof comment === 'function' ? comment() : comment;
+        }
+        comments['db_driver'] = `knex:${knexVersion}`;
 
         if (Knex.__middleware__) {
             const context = hook.getContext();
@@ -77,6 +80,8 @@ exports.wrapMainKnex = (Knex, include={}, options={}) => {
         const filtering = typeof include === 'object' && include && Object.keys(include).length > 0; 
         // Filter out keys whose values are undefined or aren't to be included by default.
         const keys = Object.keys(comments).filter((key) => {
+            if (additionalComments[key]) return true;
+            
             /* c8 ignore next 6 */
             if (!filtering)
                 return defaultFields[key] && comments[key];
